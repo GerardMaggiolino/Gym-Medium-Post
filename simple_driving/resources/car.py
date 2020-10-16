@@ -1,6 +1,6 @@
 import pybullet as p
-import numpy as np
 import os
+import math
 
 
 class Car:
@@ -11,8 +11,72 @@ class Car:
                               basePosition=[0, 0, 0.1],
                               physicsClientId=client)
 
-    def get_ids(self):
-        return self.client, self.car
+        # Joint indices as found by p.getJointInfo()
+        self.steering_joints = [0, 2]
+        self.drive_joints = [1, 3, 4, 5]
+        # Joint speed
+        self.joint_speed = 0
+        # Drag constants
+        self.c_rolling = 0.2
+        self.c_drag = 0.01
+        # Throttle constant increases "speed" of the car
+        self.c_throttle = 20
 
-    def step(self, action):
-        pass
+    def get_ids(self):
+        return self.car, self.client
+
+    def apply_action(self, action):
+        # Expects action to be two dimensional
+        throttle, steering_angle = action
+
+        # Clip throttle and steering angle to reasonable values
+        throttle = min(max(throttle, 0), 1)
+        steering_angle = max(min(steering_angle, 0.6), -0.6)
+
+        # Set the steering joint positions
+        p.setJointMotorControlArray(self.car, self.steering_joints,
+                                    controlMode=p.POSITION_CONTROL,
+                                    targetPositions=[steering_angle] * 2,
+                                    physicsClientId=self.client)
+
+        # Calculate drag / mechanical resistance ourselves
+        # Using velocity control, as torque control requires precise models
+        friction = -self.joint_speed * (self.joint_speed * self.c_drag +
+                                        self.c_rolling)
+        acceleration = self.c_throttle * throttle + friction
+        # Each time step is 1/240 of a second
+        self.joint_speed = self.joint_speed + 1/30 * acceleration
+        if self.joint_speed < 0:
+            self.joint_speed = 0
+
+        # Set the velocity of the wheel joints directly
+        p.setJointMotorControlArray(
+            bodyUniqueId=self.car,
+            jointIndices=self.drive_joints,
+            controlMode=p.VELOCITY_CONTROL,
+            targetVelocities=[self.joint_speed] * 4,
+            forces=[1.2] * 4,
+            physicsClientId=self.client)
+
+    def get_observation(self):
+        # Get the position and orientation of the car in the simulation
+        pos, ang = p.getBasePositionAndOrientation(self.car, self.client)
+        ang = p.getEulerFromQuaternion(ang)
+        ori = (math.cos(ang[2]), math.sin(ang[2]))
+        pos = pos[:2]
+        # Get the velocity of the car
+        vel = p.getBaseVelocity(self.car, self.client)[0][0:2]
+
+        # Concatenate position, orientation, velocity
+        observation = (pos + ori + vel)
+
+        return observation
+
+
+
+
+
+
+
+
+
