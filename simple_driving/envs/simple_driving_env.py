@@ -88,6 +88,7 @@ class SimpleDrivingEnv(gym.Env):
     def render(self, mode='human'):
         if self.rendered_img is None:
             self.rendered_img = plt.imshow(np.zeros((100, 100, 4)))
+            print("Render called")
 
         # Base information
         car_id, client_id = self.car.get_ids()
