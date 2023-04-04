@@ -13,7 +13,7 @@ def main():
     #agent.load_model("agent.pth")
     agent.train("SimpleDriving-v0", seed=0, batch_size=5000, iterations=100,
                 max_episode_length=250, verbose=True)
-    agent.save_model("agent.pth")
+    agent.save_model("train_one.pth")
 
     env = gym.make('SimpleDriving-v0')
     ob = env.reset()

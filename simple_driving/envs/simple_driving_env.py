@@ -20,7 +20,7 @@ class SimpleDrivingEnv(gym.Env):
             high=np.array([10, 10, 1, 1, 5, 5, 10, 10], dtype=np.float32))
         self.np_random, _ = gym.utils.seeding.np_random()
 
-        self.client = p.connect(p.GUI)
+        self.client = p.connect(p.DIRECT)
         # Reduce length of episodes for RL algorithms
         p.setTimeStep(1/30, self.client)
 
@@ -68,10 +68,19 @@ class SimpleDrivingEnv(gym.Env):
         self.car = Car(self.client)
 
         # Set the goal to a random target
+        """
         x = (self.np_random.uniform(5, 9) if self.np_random.randint(2) else
              self.np_random.uniform(-5, -9))
         y = (self.np_random.uniform(5, 9) if self.np_random.randint(2) else
              self.np_random.uniform(-5, -9))
+        """
+        #Updated goal generator using new numpy choice.
+        x = (self.np_random.uniform(5, 9) if self.np_random.choice([True, False]) else
+             self.np_random.uniform(-9, -5))
+        y = (self.np_random.uniform(5, 9) if self.np_random.choice([True, False]) else
+             self.np_random.uniform(-9, -5))
+
+
         self.goal = (x, y)
         self.done = False
 
