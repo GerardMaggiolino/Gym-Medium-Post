@@ -20,7 +20,7 @@ class SimpleDrivingEnv(gym.Env):
             high=np.array([10, 10, 1, 1, 5, 5, 10, 10], dtype=np.float32))
         self.np_random, _ = gym.utils.seeding.np_random()
 
-        self.client = p.connect(p.DIRECT)
+        self.client = p.connect(p.GUI)
         # Reduce length of episodes for RL algorithms
         p.setTimeStep(1/30, self.client)
 

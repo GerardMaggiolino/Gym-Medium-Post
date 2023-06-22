@@ -23,6 +23,13 @@ class TRPOAgent:
         self.cg_state_percent = cg_state_percent
         self.distribution = torch.distributions.normal.Normal
 
+        #Added storage of previous / best policies
+        self.best_agent = {}
+        self.best_reward = -float('inf') # initialize best_reward to negative infinity
+        self.best_policy = None # initialize best_policy to None
+        self.best_logstd = None # init best_logstd to none
+
+
         # Cuda check
         self.device = (torch.device('cuda') if torch.cuda.is_available()
                        else torch.device('cpu'))
@@ -284,12 +291,34 @@ class TRPOAgent:
                              / (num_episode - 1), 3))
                 print(f'Average Reward over Iteration {iteration}: {avg}')
             # Optimize after batch
+
+            self.track_best_model(avg)
+
             self.optimize()
 
         env.close()
         # Return recording information
         return recording
+    
 
+    def track_best_model(self, reward):
+        if reward > self.best_reward:
+            print(f'Better agent found! It has a reward of {reward}')
+            self.best_reward = reward
+            self.best_agent = {
+                'reward': reward,
+                'policy': deepcopy(self.policy),
+                'logstd': deepcopy(self.logstd)
+            }
+
+
+    def save_best_agent(self, path):
+        if self.best_agent:
+            torch.save({
+                'policy': self.best_agent['policy'].state_dict(),
+                'logstd': self.best_agent['logstd']
+            }, path)
+    
     def save_model(self, path):
         torch.save({
             'policy': self.policy.state_dict(),
