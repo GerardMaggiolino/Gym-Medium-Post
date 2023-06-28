@@ -10,13 +10,16 @@ def main():
                              torch.nn.Linear(64, 2))
     agent = TRPOAgent(policy=nn)
 
-    #agent.load_model("train_one.pth")
+    agent.load_model("models/Model Reward=24.967.pth")
     agent.train("SimpleDriving-v0", seed=0, batch_size=5000, iterations=100,
                 max_episode_length=250, verbose=True)
-    agent.save_model("windows.pth")
+    #agent.save_model("models/")
+    agent.save_best_agent("models/")
 
     env = gym.make('SimpleDriving-v0')
     ob = env.reset()
+    env.render()
+    
     while True:
         action = agent(ob)
         ob, _, done, _ = env.step(action)
@@ -24,7 +27,7 @@ def main():
         if done:
             ob = env.reset()
             time.sleep(1/30)
-
+    
 
 if __name__ == '__main__':
     main()

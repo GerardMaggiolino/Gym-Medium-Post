@@ -20,7 +20,7 @@ class SimpleDrivingEnv(gym.Env):
             high=np.array([10, 10, 1, 1, 5, 5, 10, 10], dtype=np.float32))
         self.np_random, _ = gym.utils.seeding.np_random()
 
-        self.client = p.connect(p.GUI)
+        self.client = p.connect(p.DIRECT)
         # Reduce length of episodes for RL algorithms
         p.setTimeStep(1/30, self.client)
 
@@ -114,6 +114,7 @@ class SimpleDrivingEnv(gym.Env):
         view_matrix = p.computeViewMatrix(pos, pos + camera_vec, up_vec)
 
         # Display image
+        
         frame = p.getCameraImage(100, 100, view_matrix, proj_matrix)[2]
         frame = np.reshape(frame, (100, 100, 4))
         self.rendered_img.set_data(frame)
