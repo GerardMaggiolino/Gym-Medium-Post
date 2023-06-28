@@ -300,6 +300,67 @@ class TRPOAgent:
         # Return recording information
         return recording
     
+    def test_model(self, env_name, seed=None, batch_size=12000, iterations=10,
+              max_episode_length=None, verbose=False):
+        # Initialize env
+        env = gym.make(env_name)
+        if seed is not None:
+            torch.manual_seed(seed)
+            env.seed(seed)
+        if max_episode_length is None:
+            max_episode_length = float('inf')
+        # Recording
+        recording = {'episode_reward': [[]],
+                     'episode_length': [0],
+                     'num_episodes_in_iteration': []}
+
+        # Begin training
+        observation = env.reset()
+        for iteration in range(iterations):
+            # Set initial value to 0
+            recording['num_episodes_in_iteration'].append(0)
+
+            for step in range(batch_size):
+                # Take step with agent
+                observation, reward, done, _ = env.step(self(observation))
+
+                # Recording, increment episode values
+                recording['episode_length'][-1] += 1
+                recording['episode_reward'][-1].append(reward)
+
+                # End of episode
+                if (done or
+                        recording['episode_length'][-1] >= max_episode_length):
+                    # Calculate discounted reward
+                    discounted_reward = recording['episode_reward'][-1].copy()
+                    for index in range(len(discounted_reward) - 2, -1, -1):
+                        discounted_reward[index] += self.discount * \
+                                                    discounted_reward[index + 1]
+                    self.buffers['completed_rewards'].extend(discounted_reward)
+
+                    # Set final recording of episode reward to total
+                    recording['episode_reward'][-1] = \
+                        sum(recording['episode_reward'][-1])
+                    # Recording
+                    recording['episode_length'].append(0)
+                    recording['episode_reward'].append([])
+                    recording['num_episodes_in_iteration'][-1] += 1
+
+                    # Reset environment
+                    observation = env.reset()
+
+            # Print information if verbose
+            if verbose:
+                num_episode = recording['num_episodes_in_iteration'][-1]
+                avg = (round(sum(recording['episode_reward'][-num_episode:-1])
+                             / (num_episode - 1), 3))
+                print(f'Average Reward over Iteration {iteration}: {avg}')
+
+
+        env.close()
+        # Return recording information
+        return recording
+    
 
     def track_best_model(self, reward):
         if reward > self.best_reward:
