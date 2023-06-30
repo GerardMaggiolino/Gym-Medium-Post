@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot name="rib">
+    <link name="ridge">
+      <visual>
+        <geometry>
+          <box size="1 20 1" />
+          <origin rpy="0 10 0" xyz="1000 0 0" />
+          <material name="blue" />
+        </geometry>
+      </visual>
+      <collision>
+        <geometry>
+          <box size="1 20 1" />
+          <origin rpy="0 10 0" xyz="0 0 0" />
+        </geometry>
+      </collision>
+      <inertial>
+          <mass value="0"/>
+          <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+      </inertial>
+    </link>
+</robot>

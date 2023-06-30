@@ -4,6 +4,8 @@ import math
 import pybullet as p
 from simple_driving.resources.car import Car
 from simple_driving.resources.plane import Plane
+#from simple_driving.resources.ribbedPlane import ribbedPlane
+from simple_driving.resources.rib import Rib
 from simple_driving.resources.goal import Goal
 import matplotlib.pyplot as plt
 
@@ -86,6 +88,9 @@ class SimpleDrivingEnv(gym.Env):
 
         # Visual element of the goal
         Goal(self.client, self.goal)
+
+        # Add Rib
+        Rib(self.client, (3,3))
 
         # Get observation to return
         car_ob = self.car.get_observation()
