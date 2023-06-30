@@ -374,7 +374,7 @@ class TRPOAgent:
 
 
     def save_best_agent(self, path):
-        namePath = path + "Model Reward=" + str(self.best_agent['reward'])+ ".pth"
+        namePath = path + "Reward=" + str(self.best_agent['reward'])+ ".pth"
         print(namePath)
         
         if self.best_agent:
