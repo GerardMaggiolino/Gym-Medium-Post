@@ -13,7 +13,7 @@ class TRPOAgent:
     """Continuous TRPO agent."""
 
     def __init__(self, policy, discount=0.98, kl_delta=0.01, cg_iteration=10,
-                 cg_dampening=0.001, cg_tolerance=1e-10, cg_state_percent=0.1):
+                 cg_dampening=0.001, cg_tolerance=1e-10, cg_state_percent=0.1, init_noise_std=0.1, noise_anneal_epochs=100):
         self.policy = policy
         self.discount = discount
         self.kl_delta = kl_delta
@@ -22,6 +22,8 @@ class TRPOAgent:
         self.cg_tolerance = cg_tolerance
         self.cg_state_percent = cg_state_percent
         self.distribution = torch.distributions.normal.Normal
+        self.init_noise_std = init_noise_std
+        self.noise_anneal_epochs = noise_anneal_epochs
 
         #Added storage of previous / best policies
         self.best_agent = {}
@@ -60,7 +62,32 @@ class TRPOAgent:
         -------
             Action choice for each action dimension.
         """
+        
         state = torch.as_tensor(state, dtype=torch.float32, device=self.device)
+
+        current_epoch = len(self.buffers['completed_rewards']) 
+        noise_std = self.calculate_noise_std(current_epoch)
+        
+        # Add noise to each layer
+        # Changed nn to policy
+        # Note that we can access specific layers with self.policy[1]
+        #print(self.policy[0])
+        #for param in self.policy[0].parameters():
+        #    print(param.data)
+
+        #for param in self.policy[2].modules():
+        #    print(param.weight.data)
+        for param in self.policy[0].modules():
+            #if isinstance(param, self.policy.nn.Linear):
+                param.weight.data += torch.randn_like(param.weight.data) * noise_std
+                param.bias.data += torch.randn_like(param.bias.data) * noise_std
+        '''
+        for param in self.policy[2].modules():
+            #if isinstance(param, self.policy.nn.Linear):
+                param.weight.data += torch.randn_like(param.weight.data) * noise_std
+                param.bias.data += torch.randn_like(param.bias.data) * noise_std
+     '''
+        # ...
 
         # Parameterize distribution with policy, sample action
         normal_dist = self.distribution(self.policy(state), self.logstd.exp())
@@ -70,6 +97,15 @@ class TRPOAgent:
         self.buffers['log_probs'].append(normal_dist.log_prob(action))
         self.buffers['states'].append(state)
         return action.cpu().numpy()
+    
+    def calculate_noise_std(self, epoch):
+        #If max epochs reached return no noise
+        if epoch >= self.noise_anneal_epochs:
+            return 0.0
+        else:
+            noise_std = self.init_noise_std - (epoch / self.noise_anneal_epochs) * self.init_noise_std
+            return noise_std
+
 
     def kl(self, new_policy, new_std, states, grad_new=True):
         """Compute KL divergence between current policy and new one.
@@ -283,6 +319,8 @@ class TRPOAgent:
 
                     # Reset environment
                     observation = env.reset()
+
+                    
 
             # Print information if verbose
             if verbose:
