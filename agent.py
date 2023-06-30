@@ -75,6 +75,11 @@ class TRPOAgent:
         #for param in self.policy[0].parameters():
         #    print(param.data)
 
+        '''
+        Everything is going to be okay.
+        Setup an overnight run with parameter adjustment for a noisy training.
+        '''
+
         #for param in self.policy[2].modules():
         #    print(param.weight.data)
         for param in self.policy[0].modules():
