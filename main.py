@@ -14,7 +14,7 @@ def main():
     tParamEpisodeLength = [175, 250, 325]
 
     n=1
-    with open('ModelTracking.csv', 'w', newline='') as modelCSV:
+    with open('../ModelTracking.csv', 'w', newline='') as modelCSV:
 
         r = csv.writer(modelCSV, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
         r.writerow(["Models Name", "Hidden Layer", "Batch Size", "Iterations", "EpisodeLength"])
