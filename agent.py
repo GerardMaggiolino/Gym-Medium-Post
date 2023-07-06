@@ -323,6 +323,7 @@ class TRPOAgent:
             for step in range(batch_size):
                 # Take step with agent
                 observation, reward, done, _ = env.step(self(observation))
+                
 
                 # Recording, increment episode values
                 recording['episode_length'][-1] += 1
@@ -375,7 +376,7 @@ class TRPOAgent:
 
     def save_best_agent(self, path):
         namePath = path + "Reward=" + str(self.best_agent['reward'])+ ".pth"
-        print(namePath)
+        #print(namePath)
         
         if self.best_agent:
             torch.save({
