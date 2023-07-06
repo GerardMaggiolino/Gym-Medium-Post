@@ -8,7 +8,9 @@ import time
 def main():
     nn = torch.nn.Sequential(torch.nn.Linear(8, 64), torch.nn.Tanh(),
                              torch.nn.Linear(64, 2))
-    agent = TRPOAgent(policy=nn)
+    
+    #TODO: Add noise parameters into init (Check init for TRPO agents for which parameter is which)
+    agent = TRPOAgent(policy=nn, input_noise=True, output_noise=True, weight_one_noise=True, weight_two_noise=True)
 
     #agent.load_model("models/Model Reward=24.967.pth")
     agent.train("SimpleDriving-v0", seed=0, batch_size=5000, iterations=100,
@@ -16,6 +18,7 @@ def main():
     #agent.save_model("models/")
     agent.save_best_agent("models/")
 
+    '''
     env = gym.make('SimpleDriving-v0')
     ob = env.reset()
     env.render()
@@ -27,6 +30,7 @@ def main():
         if done:
             ob = env.reset()
             time.sleep(1/30)
+    '''
     
 
 if __name__ == '__main__':

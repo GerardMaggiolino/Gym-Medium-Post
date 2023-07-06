@@ -37,7 +37,7 @@ class SimpleDrivingEnv(gym.Env):
         self.car.apply_action(action)
         p.stepSimulation()
         car_ob = self.car.get_observation()
-
+        
         # Compute reward as L2 change in distance to goal
         dist_to_goal = math.sqrt(((car_ob[0] - self.goal[0]) ** 2 +
                                   (car_ob[1] - self.goal[1]) ** 2))

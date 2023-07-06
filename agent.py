@@ -12,7 +12,7 @@ from torch.nn.utils.convert_parameters import vector_to_parameters
 class TRPOAgent:
     """Continuous TRPO agent."""
 
-    def __init__(self, policy, discount=0.98, kl_delta=0.01, cg_iteration=10,
+    def __init__(self, policy, input_noise = False, output_noise=False, weight_one_noise=False, weight_two_noise=False, discount=0.98, kl_delta=0.01, cg_iteration=10,
                  cg_dampening=0.001, cg_tolerance=1e-10, cg_state_percent=0.1, init_noise_std=0.1, noise_anneal_epochs=100):
         self.policy = policy
         self.discount = discount
@@ -24,6 +24,12 @@ class TRPOAgent:
         self.distribution = torch.distributions.normal.Normal
         self.init_noise_std = init_noise_std
         self.noise_anneal_epochs = noise_anneal_epochs
+
+        #TODO: Initialise where noise is going to be added in this agent
+        self.input_noise = input_noise
+        self.output_noise = output_noise
+        self.weight_one_noise = weight_one_noise
+        self.weight_two_noise = weight_two_noise
 
         #Added storage of previous / best policies
         self.best_agent = {}
@@ -52,6 +58,9 @@ class TRPOAgent:
                         'completed_rewards': [], 'states': []}
 
     def __call__(self, state):
+        print(f'state: {state}')
+
+
         """
         Peforms forward pass on the NN and parameterized distribution.
         Parameters
@@ -65,9 +74,10 @@ class TRPOAgent:
         
         state = torch.as_tensor(state, dtype=torch.float32, device=self.device)
 
-        current_epoch = len(self.buffers['completed_rewards']) 
+        current_epoch = len(self.buffers['completed_rewards'])
         noise_std = self.calculate_noise_std(current_epoch)
         
+
         # Add noise to each layer
         # Changed nn to policy
         # Note that we can access specific layers with self.policy[1]
@@ -80,19 +90,29 @@ class TRPOAgent:
         Setup an overnight run with parameter adjustment for a noisy training.
         '''
 
-        #for param in self.policy[2].modules():
-        #    print(param.weight.data)
-        for param in self.policy[0].modules():
-            #if isinstance(param, self.policy.nn.Linear):
-                param.weight.data += torch.randn_like(param.weight.data) * noise_std
+        #DONE: Add if statement for input_noise so block happens when true
+        if (self.input_noise == True):
+            state += torch.randn_like(state) * noise_std
+            print("Input noise added")
+
+        #DONE: Add if statement for weight_one_noise so this block happens when weight_one_noise is true
+        if (self.weight_one_noise == True):
+            for param in self.policy[0].modules():
+                #if isinstance(param, self.policy.nn.Linear):
                 param.bias.data += torch.randn_like(param.bias.data) * noise_std
-        '''
-        for param in self.policy[2].modules():
-            #if isinstance(param, self.policy.nn.Linear):
                 param.weight.data += torch.randn_like(param.weight.data) * noise_std
+                print("Weight one noise added")
+
+
+        #DONE: Add if statement for weight_two_noise so this block happens when is true
+        if (self.weight_two_noise == True):
+            for param in self.policy[2].modules():
+                #if isinstance(param, self.policy.nn.Linear):
                 param.bias.data += torch.randn_like(param.bias.data) * noise_std
-     '''
-        # ...
+                param.weight.data += torch.randn_like(param.weight.data) * noise_std
+                print("Weight two noise added")
+
+
 
         # Parameterize distribution with policy, sample action
         normal_dist = self.distribution(self.policy(state), self.logstd.exp())
@@ -274,9 +294,9 @@ class TRPOAgent:
         # Update buffers removing processed steps
         for key, storage in self.buffers.items():
             del storage[:num_batch_steps]
-
+    #TODO: (DONE) Already added parameters for adding noise in different places all defaulting to false
     def train(self, env_name, seed=None, batch_size=12000, iterations=100,
-              max_episode_length=None, verbose=False):
+              max_episode_length=None, verbose=False, input_noise = False, output_noise=False, weight_one_noise=False, weight_two_noise=False):
 
         # Initialize env
         env = gym.make(env_name)
@@ -298,6 +318,7 @@ class TRPOAgent:
 
             for step in range(batch_size):
                 # Take step with agent
+                # TODO: Pass parameters output_noise and input_noise
                 observation, reward, done, _ = env.step(self(observation))
 
                 # Recording, increment episode values
