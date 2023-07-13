@@ -3,6 +3,7 @@ File holds self contained TRPO agent.
 """
 import torch
 import gym
+import csv
 from numpy.random import choice
 from copy import deepcopy
 from torch.nn.utils.convert_parameters import parameters_to_vector
@@ -58,7 +59,7 @@ class TRPOAgent:
                         'completed_rewards': [], 'states': []}
 
     def __call__(self, state):
-        print(f'state: {state}')
+        #print(f'state: {state}')
 
 
         """
@@ -75,6 +76,8 @@ class TRPOAgent:
         state = torch.as_tensor(state, dtype=torch.float32, device=self.device)
 
         current_epoch = len(self.buffers['completed_rewards'])
+
+    
         noise_std = self.calculate_noise_std(current_epoch)
         
 
@@ -91,9 +94,11 @@ class TRPOAgent:
         '''
 
         #DONE: Add if statement for input_noise so block happens when true
+        # State is a our input tensor
         if (self.input_noise == True):
             state += torch.randn_like(state) * noise_std
             print("Input noise added")
+  
 
         #DONE: Add if statement for weight_one_noise so this block happens when weight_one_noise is true
         if (self.weight_one_noise == True):
@@ -112,11 +117,16 @@ class TRPOAgent:
                 param.weight.data += torch.randn_like(param.weight.data) * noise_std
                 print("Weight two noise added")
 
-
-
         # Parameterize distribution with policy, sample action
         normal_dist = self.distribution(self.policy(state), self.logstd.exp())
         action = normal_dist.sample()
+
+        if (self.output_noise == True):
+            action += torch.randn_like(action) * noise_std
+            print("Output Noise Added")
+
+
+
         # Save information
         self.buffers['actions'].append(action)
         self.buffers['log_probs'].append(normal_dist.log_prob(action))
@@ -125,10 +135,13 @@ class TRPOAgent:
     
     def calculate_noise_std(self, epoch):
         #If max epochs reached return no noise
+        print(f"Epochs {epoch}")
         if epoch >= self.noise_anneal_epochs:
+            print("No noise")
             return 0.0
         else:
             noise_std = self.init_noise_std - (epoch / self.noise_anneal_epochs) * self.init_noise_std
+            print (f"Noise: {noise_std}")
             return noise_std
 
 
@@ -294,9 +307,16 @@ class TRPOAgent:
         # Update buffers removing processed steps
         for key, storage in self.buffers.items():
             del storage[:num_batch_steps]
-    #TODO: (DONE) Already added parameters for adding noise in different places all defaulting to false
+
+
+
+    #TODO: (DONE) Already added parameters for adding noise in different places all defaulting to false. Think we remove this?!
+    ##OI look, params should get rid off if you dont need them anymore, just be sure.
+
+
+
     def train(self, env_name, seed=None, batch_size=12000, iterations=100,
-              max_episode_length=None, verbose=False, input_noise = False, output_noise=False, weight_one_noise=False, weight_two_noise=False):
+              max_episode_length=None, verbose=False, input_noise = False, output_noise=False, weight_one_noise=False, weight_two_noise=False, model_num=0):
 
         # Initialize env
         env = gym.make(env_name)
@@ -310,63 +330,84 @@ class TRPOAgent:
                      'episode_length': [0],
                      'num_episodes_in_iteration': []}
 
-        # Begin training
-        observation = env.reset()
-        for iteration in range(iterations):
-            # Set initial value to 0
-            recording['num_episodes_in_iteration'].append(0)
+        with open(f'../Data/Noisy Overnight/Reward Recording/Model {model_num} recording.csv', 'w', newline='') as recordingCSV:
+            r = csv.writer(recordingCSV, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            r.writerow(["Model num", "Episode Num", "Episode Reward"])
+            #Add Headers
 
-            for step in range(batch_size):
-                # Take step with agent
-                # TODO: Pass parameters output_noise and input_noise
-                observation, reward, done, _ = env.step(self(observation))
 
-                # Recording, increment episode values
-                recording['episode_length'][-1] += 1
-                recording['episode_reward'][-1].append(reward)
+            # Begin training
+            observation = env.reset()
+            for iteration in range(iterations):
+                # Set initial value to 0
+                recording['num_episodes_in_iteration'].append(0)
 
-                # End of episode
-                if (done or
-                        recording['episode_length'][-1] >= max_episode_length):
-                    # Calculate discounted reward
-                    discounted_reward = recording['episode_reward'][-1].copy()
-                    for index in range(len(discounted_reward) - 2, -1, -1):
-                        discounted_reward[index] += self.discount * \
-                                                    discounted_reward[index + 1]
-                    self.buffers['completed_rewards'].extend(discounted_reward)
+                for step in range(batch_size):
+                    # Take step with agent
+                    # TODO: Pass parameters output_noise and input_noise
+                    observation, reward, done, _ = env.step(self(observation))
 
-                    # Set final recording of episode reward to total
-                    recording['episode_reward'][-1] = \
-                        sum(recording['episode_reward'][-1])
-                    # Recording
-                    recording['episode_length'].append(0)
-                    recording['episode_reward'].append([])
-                    recording['num_episodes_in_iteration'][-1] += 1
+                    # Recording, increment episode values
+                    recording['episode_length'][-1] += 1
+                    recording['episode_reward'][-1].append(reward)
 
-                    # Reset environment
-                    observation = env.reset()
+                    # End of episode
+                    if (done or
+                            recording['episode_length'][-1] >= max_episode_length):
+                        # Calculate discounted reward
+                        discounted_reward = recording['episode_reward'][-1].copy()
+                        for index in range(len(discounted_reward) - 2, -1, -1):
+                            discounted_reward[index] += self.discount * \
+                                                        discounted_reward[index + 1]
+                        self.buffers['completed_rewards'].extend(discounted_reward)
 
-                    
+                        # Set final recording of episode reward to total
+                        recording['episode_reward'][-1] = \
+                            sum(recording['episode_reward'][-1])
+                        # Recording
+                        recording['episode_length'].append(0)
+                        recording['episode_reward'].append([])
+                        recording['num_episodes_in_iteration'][-1] += 1
 
-            # Print information if verbose
-            if verbose:
-                num_episode = recording['num_episodes_in_iteration'][-1]
-                try:
-                    avg = (round(sum(recording['episode_reward'][-num_episode:-1])
-                             / (num_episode - 1), 3))
-                except ZeroDivisionError:
-                    print("cant divide by zero")
-                print(f'Average Reward over Iteration {iteration}: {avg}')
-            # Optimize after batch
+                        # Reset environment
+                        observation = env.reset()
 
-            self.track_best_model(avg)
+                        
 
-            self.optimize()
+                # Print information if verbose
+                if verbose:
+                    num_episode = recording['num_episodes_in_iteration'][-1]
+                    try:
+                        avg = (round(sum(recording['episode_reward'][-num_episode:-1])
+                                / (num_episode - 1), 3))
+                    except ZeroDivisionError:
+                        print("cant divide by zero")
+                    print(f'Average Reward over Iteration {iteration}: {avg}')
+                # Optimize after batch
+
+                # If model num has been set (not 0 = default) then save recording data to CSV
+                if model_num != 0:
+                    r.writerow([model_num, iteration, (round(sum(recording['episode_reward'][-num_episode:-1])
+                                / (num_episode - 1), 3))])
+                    recordingCSV.flush()
+
+                self.track_best_model(avg)
+
+                self.optimize()
 
         env.close()
         # Return recording information
         return recording
     
+
+
+    '''
+    def save_recording(self, model_num, recording, episode_num):
+        with open(f'../Data/Noisy Overnight/Reward Recording/Model {model_num} recording.csv', 'w', newline='') as recordingCSV:
+            r = csv.writer(recordingCSV, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            r.writerow([model_num, ',', episode_num, ',', recording])
+            recordingCSV.flush()
+'''
 
     def track_best_model(self, reward):
         if reward > self.best_reward:
@@ -378,11 +419,8 @@ class TRPOAgent:
                 'logstd': deepcopy(self.logstd)
             }
 
-
     def save_best_agent(self, path):
         namePath = path + "Model Reward=" + str(self.best_agent['reward'])+ ".pth"
-        print(namePath)
-        
         if self.best_agent:
             torch.save({
                 'policy': self.best_agent['policy'].state_dict(),
