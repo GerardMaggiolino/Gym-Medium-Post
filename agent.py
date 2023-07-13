@@ -3,7 +3,9 @@ File holds self contained TRPO agent.
 """
 import torch
 import gym
+import csv
 from numpy.random import choice
+import numpy as np
 from copy import deepcopy
 from torch.nn.utils.convert_parameters import parameters_to_vector
 from torch.nn.utils.convert_parameters import vector_to_parameters
@@ -12,8 +14,8 @@ from torch.nn.utils.convert_parameters import vector_to_parameters
 class TRPOAgent:
     """Continuous TRPO agent."""
 
-    def __init__(self, policy, discount=0.98, kl_delta=0.01, cg_iteration=10,
-                 cg_dampening=0.001, cg_tolerance=1e-10, cg_state_percent=0.1):
+    def __init__(self, policy, input_noise = False, output_noise=False, weight_one_noise=False, weight_two_noise=False, discount=0.98, kl_delta=0.01, cg_iteration=10,
+                 cg_dampening=0.001, cg_tolerance=1e-10, cg_state_percent=0.1, noise=0.1, noise_max_epochs=200, anneal=False):
         self.policy = policy
         self.discount = discount
         self.kl_delta = kl_delta
@@ -22,6 +24,25 @@ class TRPOAgent:
         self.cg_tolerance = cg_tolerance
         self.cg_state_percent = cg_state_percent
         self.distribution = torch.distributions.normal.Normal
+
+        #Noise Variables
+        self.noise = noise
+        self.noise_anneal_epochs = noise_max_epochs
+        self.anneal = anneal
+
+
+        #TODO: Initialise where noise is going to be added in this agent
+        self.input_noise = input_noise
+        self.output_noise = output_noise
+        self.weight_one_noise = weight_one_noise
+        self.weight_two_noise = weight_two_noise
+
+        #Added storage of previous / best policies
+        self.best_agent = {}
+        self.best_reward = -float('inf') # initialize best_reward to negative infinity
+        self.best_policy = None # initialize best_policy to None
+        self.best_logstd = None # init best_logstd to none
+
 
         # Cuda check
         self.device = (torch.device('cuda') if torch.cuda.is_available()
@@ -43,6 +64,9 @@ class TRPOAgent:
                         'completed_rewards': [], 'states': []}
 
     def __call__(self, state):
+        #print(f'state: {state}')
+
+
         """
         Peforms forward pass on the NN and parameterized distribution.
         Parameters
@@ -53,16 +77,105 @@ class TRPOAgent:
         -------
             Action choice for each action dimension.
         """
+        
         state = torch.as_tensor(state, dtype=torch.float32, device=self.device)
 
+        #current_epoch = len(self.buffers['completed_rewards'])
+        #print(f"Current epoch {current_epoch}")
+
+    
+        #noise_std = self.calculate_noise_std(current_epoch)
+        
+
+        # Add noise to each layer
+        # Changed nn to policy
+        # Note that we can access specific layers with self.policy[1]
+        #print(self.policy[0])
+        #for param in self.policy[0].parameters():
+        #    print(param.data)
+
+        '''
+        Everything is going to be okay.
+        Setup an overnight run with parameter adjustment for a noisy training.
+        '''
+
+        #DONE: Add if statement for input_noise so block happens when true
+        # State is a our input tensor
+        if (self.input_noise == True):
+            state += torch.randn_like(state) * self.noise
+            print("Input noise added")
+  
+
+        #DONE: Add if statement for weight_one_noise so this block happens when weight_one_noise is true
+        '''
+        if (self.weight_one_noise == True):
+            for param in self.policy[0].modules():
+                #if isinstance(param, self.policy.nn.Linear):
+                param.bias.data += torch.randn_like(param.bias.data) * self.noise
+                param.weight.data += torch.randn_like(param.weight.data) * self.noise
+                #print("Weight one noise added")
+        '''
+        
+        if (self.weight_one_noise == True):
+            for param in self.policy[0].modules():
+                #if isinstance(param, self.policy.nn.Linear):
+                mean = 0
+                # Generate the Gaussian noise tensor
+                noiseTensor = torch.tensor(np.random.normal(mean, self.noise, param.weight.data.size()), device=self.device, dtype=torch.float)
+
+                # Add the noise tensor to the original tensor
+                param.weight.data = param.weight.data + noiseTensor
+
+        if (self.weight_two_noise == True):
+            for param in self.policy[2].modules():
+                #if isinstance(param, self.policy.nn.Linear):
+                mean = 0
+                # Generate the Gaussian noise tensor
+                noiseTensor = torch.tensor(np.random.normal(mean, self.noise, param.weight.data.size()), device=self.device, dtype=torch.float)
+
+                # Add the noise tensor to the original tensor
+                param.weight.data = param.weight.data + noiseTensor
+        
+        '''
+        #DONE: Add if statement for weight_two_noise so this block happens when is true
+        if (self.weight_two_noise == True):
+            for param in self.policy[2].modules():
+                #if isinstance(param, self.policy.nn.Linear):
+                param.bias.data += torch.randn_like(param.bias.data) * self.noise
+                param.weight.data += torch.randn_like(param.weight.data) * self.noise
+                #print("Weight two noise added")
+        '''
         # Parameterize distribution with policy, sample action
         normal_dist = self.distribution(self.policy(state), self.logstd.exp())
         action = normal_dist.sample()
+
+        if (self.output_noise == True):
+            action += torch.randn_like(action) * self.noise
+            #print("Output Noise Added")
+
+
+
         # Save information
         self.buffers['actions'].append(action)
         self.buffers['log_probs'].append(normal_dist.log_prob(action))
         self.buffers['states'].append(state)
         return action.cpu().numpy()
+    
+    def calculate_noise_std(self, epoch):
+        #If max epochs reached return no noise
+        #print(f"Epochs {epoch}")
+        if epoch >= self.noise_anneal_epochs:
+            print("No noise")
+            return 0.0
+        else:
+            noise_std = self.noise - (epoch / self.noise_anneal_epochs) * self.noise
+            #print (f"Noise: {noise_std}")
+            if self.anneal:
+                return noise_std
+            else:
+                return self.noise
+        
+
 
     def kl(self, new_policy, new_std, states, grad_new=True):
         """Compute KL divergence between current policy and new one.
@@ -227,8 +340,15 @@ class TRPOAgent:
         for key, storage in self.buffers.items():
             del storage[:num_batch_steps]
 
+
+
+    #TODO: (DONE) Already added parameters for adding noise in different places all defaulting to false. Think we remove this?!
+    ##OI look, params should get rid off if you dont need them anymore, just be sure.
+
+
+
     def train(self, env_name, seed=None, batch_size=12000, iterations=100,
-              max_episode_length=None, verbose=False):
+              max_episode_length=None, verbose=False, input_noise = False, output_noise=False, weight_one_noise=False, weight_two_noise=False, model_num=0):
 
         # Initialize env
         env = gym.make(env_name)
@@ -242,53 +362,114 @@ class TRPOAgent:
                      'episode_length': [0],
                      'num_episodes_in_iteration': []}
 
-        # Begin training
-        observation = env.reset()
-        for iteration in range(iterations):
-            # Set initial value to 0
-            recording['num_episodes_in_iteration'].append(0)
+        with open(f'../Data/Noisy Overnight/Reward Recording/Model {model_num} recording.csv', 'w', newline='') as recordingCSV:
+            r = csv.writer(recordingCSV, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            r.writerow(["Model num", "Episode Num", "Episode Reward"])
+            #Add Headers
 
-            for step in range(batch_size):
-                # Take step with agent
-                observation, reward, done, _ = env.step(self(observation))
 
-                # Recording, increment episode values
-                recording['episode_length'][-1] += 1
-                recording['episode_reward'][-1].append(reward)
+            # Begin training
+            observation = env.reset()
+            for iteration in range(iterations):
+                
+                #Calculate Noise Annealment
+                self.current_epoch = self.noise_anneal_epochs - iteration
+                
+                self.noise = self.calculate_noise_std(iteration)
+                
 
-                # End of episode
-                if (done or
-                        recording['episode_length'][-1] >= max_episode_length):
-                    # Calculate discounted reward
-                    discounted_reward = recording['episode_reward'][-1].copy()
-                    for index in range(len(discounted_reward) - 2, -1, -1):
-                        discounted_reward[index] += self.discount * \
-                                                    discounted_reward[index + 1]
-                    self.buffers['completed_rewards'].extend(discounted_reward)
 
-                    # Set final recording of episode reward to total
-                    recording['episode_reward'][-1] = \
-                        sum(recording['episode_reward'][-1])
-                    # Recording
-                    recording['episode_length'].append(0)
-                    recording['episode_reward'].append([])
-                    recording['num_episodes_in_iteration'][-1] += 1
+                # Set initial value to 0
+                recording['num_episodes_in_iteration'].append(0)
 
-                    # Reset environment
-                    observation = env.reset()
+                for step in range(batch_size):
+                    # Take step with agent
+                    # TODO: Pass parameters output_noise and input_noise
+                    observation, reward, done, _ = env.step(self(observation))
 
-            # Print information if verbose
-            if verbose:
-                num_episode = recording['num_episodes_in_iteration'][-1]
-                avg = (round(sum(recording['episode_reward'][-num_episode:-1])
-                             / (num_episode - 1), 3))
-                print(f'Average Reward over Iteration {iteration}: {avg}')
-            # Optimize after batch
-            self.optimize()
+                    # Recording, increment episode values
+                    recording['episode_length'][-1] += 1
+                    recording['episode_reward'][-1].append(reward)
+
+                    # End of episode
+                    if (done or
+                            recording['episode_length'][-1] >= max_episode_length):
+                        # Calculate discounted reward
+                        discounted_reward = recording['episode_reward'][-1].copy()
+                        for index in range(len(discounted_reward) - 2, -1, -1):
+                            discounted_reward[index] += self.discount * \
+                                                        discounted_reward[index + 1]
+                        self.buffers['completed_rewards'].extend(discounted_reward)
+
+                        # Set final recording of episode reward to total
+                        recording['episode_reward'][-1] = \
+                            sum(recording['episode_reward'][-1])
+                        # Recording
+                        recording['episode_length'].append(0)
+                        recording['episode_reward'].append([])
+                        recording['num_episodes_in_iteration'][-1] += 1
+
+                        # Reset environment
+                        observation = env.reset()
+
+                        
+
+                # Print information if verbose
+                if verbose:
+                    num_episode = recording['num_episodes_in_iteration'][-1]
+                    try:
+                        avg = (round(sum(recording['episode_reward'][-num_episode:-1])
+                                / (num_episode - 1), 3))
+                    except ZeroDivisionError:
+                        print("cant divide by zero")
+                    print("//-----------------------------------------")
+                    print(f'Average Reward over Iteration {iteration}: {avg}')
+                    print(f"Current Epoch: {self.current_epoch}")
+                    print(f"Current Noise: {self.noise}")
+                # Optimize after batch
+
+                # If model num has been set (not 0 = default) then save recording data to CSV
+                if model_num != 0:
+                    r.writerow([model_num, iteration, (round(sum(recording['episode_reward'][-num_episode:-1])
+                                / (num_episode - 1), 3))])
+                    recordingCSV.flush()
+
+                self.track_best_model(avg)
+
+                self.optimize()
 
         env.close()
         # Return recording information
         return recording
+    
+
+
+    '''
+    def save_recording(self, model_num, recording, episode_num):
+        with open(f'../Data/Noisy Overnight/Reward Recording/Model {model_num} recording.csv', 'w', newline='') as recordingCSV:
+            r = csv.writer(recordingCSV, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            r.writerow([model_num, ',', episode_num, ',', recording])
+            recordingCSV.flush()
+'''
+
+    def track_best_model(self, reward):
+        if reward > self.best_reward:
+            print(f'Better agent found! It has a reward of {reward}')
+            self.best_reward = reward
+            self.best_agent = {
+                'reward': reward,
+                'policy': deepcopy(self.policy),
+                'logstd': deepcopy(self.logstd)
+            }
+
+    def save_best_agent(self, path):
+        namePath = path + "Model Reward=" + str(self.best_agent['reward'])+ ".pth"
+        if self.best_agent:
+            torch.save({
+                'policy': self.best_agent['policy'].state_dict(),
+                'logstd': self.best_agent['logstd']
+            }, namePath)
+        
 
     def save_model(self, path):
         torch.save({
