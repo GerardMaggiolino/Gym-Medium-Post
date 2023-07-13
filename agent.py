@@ -5,6 +5,7 @@ import torch
 import gym
 import csv
 from numpy.random import choice
+import numpy as np
 from copy import deepcopy
 from torch.nn.utils.convert_parameters import parameters_to_vector
 from torch.nn.utils.convert_parameters import vector_to_parameters
@@ -14,7 +15,7 @@ class TRPOAgent:
     """Continuous TRPO agent."""
 
     def __init__(self, policy, input_noise = False, output_noise=False, weight_one_noise=False, weight_two_noise=False, discount=0.98, kl_delta=0.01, cg_iteration=10,
-                 cg_dampening=0.001, cg_tolerance=1e-10, cg_state_percent=0.1, init_noise_std=0.1, noise_anneal_epochs=100):
+                 cg_dampening=0.001, cg_tolerance=1e-10, cg_state_percent=0.1, noise=0.1, noise_max_epochs=200, anneal=False):
         self.policy = policy
         self.discount = discount
         self.kl_delta = kl_delta
@@ -23,8 +24,12 @@ class TRPOAgent:
         self.cg_tolerance = cg_tolerance
         self.cg_state_percent = cg_state_percent
         self.distribution = torch.distributions.normal.Normal
-        self.init_noise_std = init_noise_std
-        self.noise_anneal_epochs = noise_anneal_epochs
+
+        #Noise Variables
+        self.noise = noise
+        self.noise_anneal_epochs = noise_max_epochs
+        self.anneal = anneal
+
 
         #TODO: Initialise where noise is going to be added in this agent
         self.input_noise = input_noise
@@ -75,10 +80,11 @@ class TRPOAgent:
         
         state = torch.as_tensor(state, dtype=torch.float32, device=self.device)
 
-        current_epoch = len(self.buffers['completed_rewards'])
+        #current_epoch = len(self.buffers['completed_rewards'])
+        #print(f"Current epoch {current_epoch}")
 
     
-        noise_std = self.calculate_noise_std(current_epoch)
+        #noise_std = self.calculate_noise_std(current_epoch)
         
 
         # Add noise to each layer
@@ -96,34 +102,56 @@ class TRPOAgent:
         #DONE: Add if statement for input_noise so block happens when true
         # State is a our input tensor
         if (self.input_noise == True):
-            state += torch.randn_like(state) * noise_std
+            state += torch.randn_like(state) * self.noise
             print("Input noise added")
   
 
         #DONE: Add if statement for weight_one_noise so this block happens when weight_one_noise is true
+        '''
         if (self.weight_one_noise == True):
             for param in self.policy[0].modules():
                 #if isinstance(param, self.policy.nn.Linear):
-                param.bias.data += torch.randn_like(param.bias.data) * noise_std
-                param.weight.data += torch.randn_like(param.weight.data) * noise_std
-                print("Weight one noise added")
+                param.bias.data += torch.randn_like(param.bias.data) * self.noise
+                param.weight.data += torch.randn_like(param.weight.data) * self.noise
+                #print("Weight one noise added")
+        '''
+        
+        if (self.weight_one_noise == True):
+            for param in self.policy[0].modules():
+                #if isinstance(param, self.policy.nn.Linear):
+                mean = 0
+                # Generate the Gaussian noise tensor
+                noiseTensor = torch.tensor(np.random.normal(mean, self.noise, param.weight.data.size()), device=self.device, dtype=torch.float)
 
+                # Add the noise tensor to the original tensor
+                param.weight.data = param.weight.data + noiseTensor
 
+        if (self.weight_two_noise == True):
+            for param in self.policy[2].modules():
+                #if isinstance(param, self.policy.nn.Linear):
+                mean = 0
+                # Generate the Gaussian noise tensor
+                noiseTensor = torch.tensor(np.random.normal(mean, self.noise, param.weight.data.size()), device=self.device, dtype=torch.float)
+
+                # Add the noise tensor to the original tensor
+                param.weight.data = param.weight.data + noiseTensor
+        
+        '''
         #DONE: Add if statement for weight_two_noise so this block happens when is true
         if (self.weight_two_noise == True):
             for param in self.policy[2].modules():
                 #if isinstance(param, self.policy.nn.Linear):
-                param.bias.data += torch.randn_like(param.bias.data) * noise_std
-                param.weight.data += torch.randn_like(param.weight.data) * noise_std
-                print("Weight two noise added")
-
+                param.bias.data += torch.randn_like(param.bias.data) * self.noise
+                param.weight.data += torch.randn_like(param.weight.data) * self.noise
+                #print("Weight two noise added")
+        '''
         # Parameterize distribution with policy, sample action
         normal_dist = self.distribution(self.policy(state), self.logstd.exp())
         action = normal_dist.sample()
 
         if (self.output_noise == True):
-            action += torch.randn_like(action) * noise_std
-            print("Output Noise Added")
+            action += torch.randn_like(action) * self.noise
+            #print("Output Noise Added")
 
 
 
@@ -135,14 +163,18 @@ class TRPOAgent:
     
     def calculate_noise_std(self, epoch):
         #If max epochs reached return no noise
-        print(f"Epochs {epoch}")
+        #print(f"Epochs {epoch}")
         if epoch >= self.noise_anneal_epochs:
             print("No noise")
             return 0.0
         else:
-            noise_std = self.init_noise_std - (epoch / self.noise_anneal_epochs) * self.init_noise_std
-            print (f"Noise: {noise_std}")
-            return noise_std
+            noise_std = self.noise - (epoch / self.noise_anneal_epochs) * self.noise
+            #print (f"Noise: {noise_std}")
+            if self.anneal:
+                return noise_std
+            else:
+                return self.noise
+        
 
 
     def kl(self, new_policy, new_std, states, grad_new=True):
@@ -339,6 +371,14 @@ class TRPOAgent:
             # Begin training
             observation = env.reset()
             for iteration in range(iterations):
+                
+                #Calculate Noise Annealment
+                self.current_epoch = self.noise_anneal_epochs - iteration
+                
+                self.noise = self.calculate_noise_std(iteration)
+                
+
+
                 # Set initial value to 0
                 recording['num_episodes_in_iteration'].append(0)
 
@@ -382,7 +422,10 @@ class TRPOAgent:
                                 / (num_episode - 1), 3))
                     except ZeroDivisionError:
                         print("cant divide by zero")
+                    print("//-----------------------------------------")
                     print(f'Average Reward over Iteration {iteration}: {avg}')
+                    print(f"Current Epoch: {self.current_epoch}")
+                    print(f"Current Noise: {self.noise}")
                 # Optimize after batch
 
                 # If model num has been set (not 0 = default) then save recording data to CSV
