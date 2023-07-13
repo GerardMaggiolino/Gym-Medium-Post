@@ -4,20 +4,15 @@ from agent import TRPOAgent
 import simple_driving
 import time
 import csv
-'''
-    
-                
-'''
 
 def main():
     
-    tParamBatchSize = [8000]
+    tParamBatchSize = [5000]
     tParamHiddenLayer = [64]
     tParamInitNoiseStd = [1.0, 1.5, 2.0, 4.0, 6.0]
     tParamNoiseChange = ["inputWeight","outputWeigh","bothWeights"]
-    tParamAnnealNoise = [False, True]
+    tParamAnnealNoise = [True, False]
 
-    n=1
     with open('../Data/Noisy Overnight/Param Recording/Parameters.csv', 'w', newline='') as modelCSV:
         r = csv.writer(modelCSV, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
         r.writerow(["Model num", "Batch Size", "Hidden Layer Size","Noise std", "Noise Location", "Annealment"])
@@ -37,7 +32,7 @@ def main():
                                                         torch.nn.Linear(hiddenLayer, 2))
                             
                                 #TODO: Add noise parameters into init (Check init for TRPO agents for which parameter is which)
-                                agent = TRPOAgent(policy=nn, input_noise=False, output_noise=False, weight_one_noise=inputWeightNoise, weight_two_noise=outputWeightNoise, noise=initNoise, noise_max_epochs=100, anneal=anneal)
+                                agent = TRPOAgent(policy=nn, input_noise=False, output_noise=False, weight_one_noise=inputWeightNoise, weight_two_noise=outputWeightNoise, max_noise_std=initNoise, max_epochs=100, anneal=anneal)
 
                                 #agent.load_model("models/good base.pth")
                                 agent.train("SimpleDriving-v0", seed=0, batch_size=batchSize, iterations=100,

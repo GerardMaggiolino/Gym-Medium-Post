@@ -15,7 +15,7 @@ class TRPOAgent:
     """Continuous TRPO agent."""
 
     def __init__(self, policy, input_noise = False, output_noise=False, weight_one_noise=False, weight_two_noise=False, discount=0.98, kl_delta=0.01, cg_iteration=10,
-                 cg_dampening=0.001, cg_tolerance=1e-10, cg_state_percent=0.1, noise=0.1, noise_max_epochs=200, anneal=False):
+                 cg_dampening=0.001, cg_tolerance=1e-10, cg_state_percent=0.1, max_noise_std=0.1, max_epochs=200, anneal=False):
         self.policy = policy
         self.discount = discount
         self.kl_delta = kl_delta
@@ -26,9 +26,10 @@ class TRPOAgent:
         self.distribution = torch.distributions.normal.Normal
 
         #Noise Variables
-        self.noise = noise
-        self.noise_anneal_epochs = noise_max_epochs
+        self.max_noise_std = max_noise_std
+        self.noise_anneal_epochs = max_epochs
         self.anneal = anneal
+        self.noise = max_noise_std
 
 
         #TODO: Initialise where noise is going to be added in this agent
@@ -169,11 +170,10 @@ class TRPOAgent:
             return 0.0
         else:
             noise_std = self.noise - (epoch / self.noise_anneal_epochs) * self.noise
-            #print (f"Noise: {noise_std}")
             if self.anneal:
                 return noise_std
             else:
-                return self.noise
+                return self.max_noise_std
         
 
 
@@ -367,11 +367,11 @@ class TRPOAgent:
             r.writerow(["Model num", "Episode Num", "Episode Reward"])
             #Add Headers
 
-
+            self.noise = self.max_noise_std
             # Begin training
             observation = env.reset()
             for iteration in range(iterations):
-                
+                self.noise = self.max_noise_std
                 #Calculate Noise Annealment
                 self.current_epoch = self.noise_anneal_epochs - iteration
                 
