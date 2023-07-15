@@ -65,9 +65,6 @@ class TRPOAgent:
                         'completed_rewards': [], 'states': []}
 
     def __call__(self, state):
-        #print(f'state: {state}')
-
-
         """
         Peforms forward pass on the NN and parameterized distribution.
         Parameters
@@ -81,42 +78,15 @@ class TRPOAgent:
         
         state = torch.as_tensor(state, dtype=torch.float32, device=self.device)
 
-        #current_epoch = len(self.buffers['completed_rewards'])
-        #print(f"Current epoch {current_epoch}")
-
-    
-        #noise_std = self.calculate_noise_std(current_epoch)
-        
-
-        # Add noise to each layer
-        # Changed nn to policy
-        # Note that we can access specific layers with self.policy[1]
-        #print(self.policy[0])
-        #for param in self.policy[0].parameters():
-        #    print(param.data)
-
-        '''
-        Everything is going to be okay.
-        Setup an overnight run with parameter adjustment for a noisy training.
-        '''
-
-        #DONE: Add if statement for input_noise so block happens when true
         # State is a our input tensor
         if (self.input_noise == True):
-            state += torch.randn_like(state) * self.noise
-            print("Input noise added")
+            mean = 0
+            # Create Tensor using numpy to draw from Gaussian Noise distrubition
+            noiseTensor = torch.tensor(np.random.normal(mean, self.noise, state.size()), device=self.device, dtype=torch.float)
+            # Add the noise tensor to the original tensor
+            state = state + noiseTensor
+            #print("Input noise added")
   
-
-        #DONE: Add if statement for weight_one_noise so this block happens when weight_one_noise is true
-        '''
-        if (self.weight_one_noise == True):
-            for param in self.policy[0].modules():
-                #if isinstance(param, self.policy.nn.Linear):
-                param.bias.data += torch.randn_like(param.bias.data) * self.noise
-                param.weight.data += torch.randn_like(param.weight.data) * self.noise
-                #print("Weight one noise added")
-        '''
-        
         if (self.weight_one_noise == True):
             for param in self.policy[0].modules():
                 #if isinstance(param, self.policy.nn.Linear):
@@ -137,21 +107,16 @@ class TRPOAgent:
                 # Add the noise tensor to the original tensor
                 param.weight.data = param.weight.data + noiseTensor
         
-        '''
-        #DONE: Add if statement for weight_two_noise so this block happens when is true
-        if (self.weight_two_noise == True):
-            for param in self.policy[2].modules():
-                #if isinstance(param, self.policy.nn.Linear):
-                param.bias.data += torch.randn_like(param.bias.data) * self.noise
-                param.weight.data += torch.randn_like(param.weight.data) * self.noise
-                #print("Weight two noise added")
-        '''
         # Parameterize distribution with policy, sample action
         normal_dist = self.distribution(self.policy(state), self.logstd.exp())
         action = normal_dist.sample()
 
         if (self.output_noise == True):
-            action += torch.randn_like(action) * self.noise
+            mean = 0
+            # Create Tensor using numpy to draw from Gaussian Noise distrubition
+            noiseTensor = torch.tensor(np.random.normal(mean, self.noise, action.size()), device=self.device, dtype=torch.float)
+            # Add the noise tensor to the original tensor
+            action = action + noiseTensor
             #print("Output Noise Added")
 
 
@@ -364,7 +329,7 @@ class TRPOAgent:
 
         with open(f'../Data/Noisy Overnight/Reward Recording/Model {model_num} recording.csv', 'w', newline='') as recordingCSV:
             r = csv.writer(recordingCSV, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            r.writerow(["Model num", "Episode Num", "Episode Reward"])
+            r.writerow(["Model num", "Episode Num", "Episode Reward", "Noise STD"])
             #Add Headers
 
             self.noise = self.max_noise_std
@@ -431,7 +396,7 @@ class TRPOAgent:
                 # If model num has been set (not 0 = default) then save recording data to CSV
                 if model_num != 0:
                     r.writerow([model_num, iteration, (round(sum(recording['episode_reward'][-num_episode:-1])
-                                / (num_episode - 1), 3))])
+                                / (num_episode - 1), 3)), self.noise])
                     recordingCSV.flush()
 
                 self.track_best_model(avg)

@@ -9,33 +9,40 @@ def main():
     
     tParamBatchSize = [5000]
     tParamHiddenLayer = [64]
-    tParamInitNoiseStd = [1.0, 1.5, 2.0, 4.0, 6.0]
-    tParamNoiseChange = ["inputWeight","outputWeigh","bothWeights"]
+    tParamInitNoiseStd = [0.5, 1.0, 1.5, 2.0]
+    tParamNoiseChange = ["ActionNoise", "ObservationNoise"]
     tParamAnnealNoise = [True, False]
-
+    n=1
     with open('../Data/Noisy Overnight/Param Recording/Parameters.csv', 'w', newline='') as modelCSV:
         r = csv.writer(modelCSV, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
         r.writerow(["Model num", "Batch Size", "Hidden Layer Size","Noise std", "Noise Location", "Annealment"])
-        for batchSize in tParamBatchSize:
-            for hiddenLayer in tParamHiddenLayer:
-                for initNoise in tParamInitNoiseStd:
-                    for noiseChange in tParamNoiseChange:
-                        for anneal in tParamAnnealNoise:
+        for anneal in tParamAnnealNoise:
+            for batchSize in tParamBatchSize:
+                for hiddenLayer in tParamHiddenLayer:
+                    for initNoise in tParamInitNoiseStd:
+                        for noiseChange in tParamNoiseChange: 
+
+                            #Noise Truth Table   
                             if noiseChange == "inputWeight":
                                 inputWeightNoise, outputWeightNoise = True, False
                             elif noiseChange == "outputWeight":
                                 inputWeightNoise, outputWeightNoise = False, True
                             elif noiseChange == "bothWeights":
-                                inputWeightNoise, outputWeightNoise = True, True                            
+                                inputWeightNoise, outputWeightNoise = True, True       
+
+                            if noiseChange == "ActionNoise":
+                                actionNoise, ObservationNoise = True, False
+                            elif noiseChange == "ObservationNoise":
+                                actionNoise, ObservationNoise = False, True
                             try:
                                 nn = torch.nn.Sequential(torch.nn.Linear(8, hiddenLayer), torch.nn.Tanh(),
                                                         torch.nn.Linear(hiddenLayer, 2))
                             
                                 #TODO: Add noise parameters into init (Check init for TRPO agents for which parameter is which)
-                                agent = TRPOAgent(policy=nn, input_noise=False, output_noise=False, weight_one_noise=inputWeightNoise, weight_two_noise=outputWeightNoise, max_noise_std=initNoise, max_epochs=100, anneal=anneal)
+                                agent = TRPOAgent(policy=nn, input_noise=actionNoise, output_noise=ObservationNoise, weight_one_noise=False, weight_two_noise=False, max_noise_std=initNoise, max_epochs=199, anneal=anneal)
 
                                 #agent.load_model("models/good base.pth")
-                                agent.train("SimpleDriving-v0", seed=0, batch_size=batchSize, iterations=100,
+                                agent.train("SimpleDriving-v0", seed=0, batch_size=batchSize, iterations=200,
                                             max_episode_length=250, verbose=True, model_num=n)
                                 agent.save_best_agent(f"../Data/Noisy Overnight/Models/Model #{n} ")
                                 r.writerow([n, batchSize, hiddenLayer, initNoise, noiseChange, anneal])
