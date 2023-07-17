@@ -7,10 +7,10 @@ import csv
 
 def main():
     
-    tParamBatchSize = [5000]
+    tParamBatchSize = [8000]
     tParamHiddenLayer = [64]
     tParamInitNoiseStd = [0.5, 1.0, 1.5, 2.0]
-    tParamNoiseChange = ["ActionNoise", "ObservationNoise"]
+    tParamNoiseChange = ["ActionNoise", "ObservationNoise", "Both"]
     tParamAnnealNoise = [True, False]
     n=1
     with open('../Data/Noisy Overnight/Param Recording/Parameters.csv', 'w', newline='') as modelCSV:
@@ -22,7 +22,7 @@ def main():
                     for initNoise in tParamInitNoiseStd:
                         for noiseChange in tParamNoiseChange: 
 
-                            #Noise Truth Table   
+                            #Noise Truth Table
                             if noiseChange == "inputWeight":
                                 inputWeightNoise, outputWeightNoise = True, False
                             elif noiseChange == "outputWeight":
@@ -34,6 +34,9 @@ def main():
                                 actionNoise, ObservationNoise = True, False
                             elif noiseChange == "ObservationNoise":
                                 actionNoise, ObservationNoise = False, True
+                            elif noiseChange == "Both":
+                                actionNoise, ObservationNoise = True, True
+
                             try:
                                 nn = torch.nn.Sequential(torch.nn.Linear(8, hiddenLayer), torch.nn.Tanh(),
                                                         torch.nn.Linear(hiddenLayer, 2))
@@ -45,6 +48,7 @@ def main():
                                 agent.train("SimpleDriving-v0", seed=0, batch_size=batchSize, iterations=200,
                                             max_episode_length=250, verbose=True, model_num=n)
                                 agent.save_best_agent(f"../Data/Noisy Overnight/Models/Model #{n} ")
+                                agent.save_model(f"../Data/Noisy Overnight/Models/Model #{n} - Last not best.pth")
                                 r.writerow([n, batchSize, hiddenLayer, initNoise, noiseChange, anneal])
                                 modelCSV.flush()
                                 n+=1
