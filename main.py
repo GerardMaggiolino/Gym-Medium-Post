@@ -6,12 +6,21 @@ import time
 import csv
 
 def main():
-    
+    '''
     tParamBatchSize = [8000]
     tParamHiddenLayer = [64]
     tParamInitNoiseStd = [0.5, 1.0, 1.5, 2.0]
     tParamNoiseChange = ["ActionNoise", "ObservationNoise", "Both"]
     tParamAnnealNoise = [True, False]
+
+    '''
+
+    tParamBatchSize = [8000]
+    tParamHiddenLayer = [64]
+    tParamInitNoiseStd = [2.0]
+    tParamNoiseChange = ["ObservationNoise", "Both"]
+    tParamAnnealNoise =  [False]
+
     n=1
     with open('../Data/Noisy Overnight/Param Recording/Parameters.csv', 'w', newline='') as modelCSV:
         r = csv.writer(modelCSV, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)

@@ -350,6 +350,7 @@ class TRPOAgent:
                 for step in range(batch_size):
                     # Take step with agent
                     # TODO: Pass parameters output_noise and input_noise
+                    # Its crazy how self calls __call__
                     observation, reward, done, _ = env.step(self(observation))
 
                     # Recording, increment episode values
