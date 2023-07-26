@@ -20,7 +20,6 @@ def main():
     tParamInitNoiseStd = [0.05, 0.1, 0.15]
     tParamNoiseChange = ["bothWeights"]
     tParamAnnealNoise =  [True, False]
-    tParamSeed = [2, None]
 
     n=1
     with open('../Data/Noisy Overnight/Param Recording/Parameters.csv', 'w', newline='') as modelCSV:
@@ -55,7 +54,7 @@ def main():
                                     agent = TRPOAgent(policy=nn, input_noise=False, output_noise=False, weight_one_noise=inputWeightNoise, weight_two_noise=outputWeightNoise, max_noise_std=initNoise, max_epochs=199, anneal=anneal)
 
                                     #agent.load_model("models/good base.pth")
-                                    agent.train("SimpleDriving-v0", seed=pSeed, batch_size=batchSize, iterations=200,
+                                    agent.train("SimpleDriving-v0", seed=None, batch_size=batchSize, iterations=200,
                                                 max_episode_length=250, verbose=True, model_num=n)
                                     agent.save_best_agent(f"../Data/Noisy Overnight/Models/Model #{n} ")
                                     agent.save_model(f"../Data/Noisy Overnight/Models/Model #{n} - Last not best.pth")
